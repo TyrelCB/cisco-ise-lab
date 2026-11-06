@@ -37,8 +37,28 @@ every field lands in the hook. Node IPs come clean from
 - **Web SSO form**: Okta "Next" is an `input[type=submit]` (no `<button>`); set the value with the native HTMLInputElement setter + `input` event, then click via `Input.dispatchMouseEvent` coords (React ignores `.click()` on some widgets).
 - **Self-signed cert**: on the agent-browser, type `thisisunsafe` on the interstitial to proceed.
 - **Login form**: POSTs go to `/admin/LoginAction.do` with OWASP CSRFGuard (`OWASP_CSRFTOKEN=...`, token embedded in `login.jsp` as `name="CSRFTokenNameValue"`); the UI also requires the dojo-set fields, and there is Referer validation — scripted curl login returns 400 "Invalid request" unless the full token+referer dance is replicated. UI login in a real browser is simplest; session cookie is `MNTLA_JWT_TOKEN` (httpOnly JWT).
-- **API ports**: ERS (9060/9061) and OPS API (9062) are **not listening** externally in this build/sandbox (only :80/:443 respond; Basic-auth to path-based endpoints 302s to /admin/). UI-session (`MNTLA_JWT_TOKEN`) calls are the working API path so far.
+- **API ports**: ERS (9060/9061) and OPS API (9062) are **not listening** as dedicated
+  ports in this build/sandbox — but **both serve on :443** with basic auth. ERS reads/writes
+  fully work (needs an `ERS: N` version header — use `ERS: 3` for internaluser writes).
+  OPS is thin: only `/api/v1/endpoint` answers; most other `/api/v1/*` paths 404.
+  The rich UI backend (`/admin/api/*`) is session-cookie + CSRFGuard only, not basic-auth reachable.
 - **openconnect `--background`** still makes the foreground call hang/timeout — verify with `pgrep -a openconnect` + `ip route | grep tun0`.
+
+## Capabilities tour (what's actually here)
+
+- **ERS**: 25,001 internal users, 1,009 identity groups, 16 TrustSec SGTs, 9 authorization
+  profiles, NAD CRUD — all exercised (create/read/update/delete an internal user + NAD).
+- **Live RADIUS**: registered VPN client as a NAD, `radtest` → **Access-Accept** (correct
+  creds) / **Access-Reject** (wrong), each visible in Operations › RADIUS › Live Logs.
+  Gotchas: user must be `changePassword:false`; NAD IP must be the `tun0` src.
+- **Policy**: 1 Default policy set (Default Network Access). **676** Cisco-provided profiling
+  policies. Full default **Posture** policy (AntiMalware/AppVis/Firewall, Win+Mac).
+- **pxGrid**: Direct Service running on :8905 (no registered subscriber). Segmentation
+  Policy Service persona disabled → SGTs defined but not enforced.
+- **AD join FAILS**: documented join creds (`Administrator`/`PythonRocks`, and DevNet
+  `C1sco12345`) both rejected — "Cannot retrieve TGT … invalid username or password".
+  The blueprint publishes no separate AD-join secret; treat AD integration as unavailable.
+- Full detail in [`ise-sandbox.md`](ise-sandbox.md).
 
 ## Files
 
