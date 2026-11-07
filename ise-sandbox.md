@@ -151,3 +151,41 @@ Routes advertised: 10.10.20-24.0/24, 10.17.248.0/24, 172.16.30.0/24, 192.168.254
   endpoint CRUD lives in the Platform API (`/api/v1/endpoint`), which went dark.
 - Custom profiling rule CRUD = Policy Administration API (disabled here) —
   so custom profiling is not scriptable in this reservation at all.
+
+## Final outcome (end of tour)
+- ise-1 `application stop ise` did not recover: through two clean paced
+  stop→start cycles and >4 h of polling, Application Server and ISE API Gateway
+  Service stayed "not running" (Database/Messaging/Prometheus came up fine).
+  `reset` is not a valid exec command on this build; no VM-level reboot hook is
+  exposed over the CLI. ise-1 UI/API dead for the remainder of the reservation.
+- ise-2 (Secondary PAN + all personas) kept its Application Server + API Gateway
+  **running**, but every `/api/v1/*` and `/ers/*` call on it answers
+  **302 → /admin/**: API service enablement is per-node and was only ever
+  enabled on ise-1. So no API fallback node existed.
+- **Task 6 verdict:** endpoint register/profile and custom profiling are not
+  testable here — ERS has no endpoint resource, endpoint CRUD is Platform API
+  (now dark), custom profiling rules are Policy Admin API (disabled by the
+  sandbox from the start).
+- **Task 9 verdict:** `ise_automation_demo.py` (group→user→attach→search→
+  cleanup over ERS) is the tour's automation artifact. Every step pattern it
+  uses was verified manually earlier in the tour (POST 201 / GET 200 / PUT 200 /
+  DELETE 204 on identitygroup + internaluser, ERS: 3); the full script run was
+  blocked by the ise-1 app outage above.
+
+## Tour scoreboard
+| # | Capability | Result |
+|---|------------|--------|
+| 1 | AD/LDAP identity source | Broken sandbox cred (52e) — documented |
+| 2 | Guest/Sponsor portals | UI present; guestuser API 401 (svc unbound) |
+| 3 | Policy build | Group + dACL authz profile via ERS OK; PA API off → no policy-set attach |
+| 4 | pxGrid | Service live :8905; registration needs mTLS SDK cert |
+| 5 | TACACS+ | ERS enum OK; service off-node; Deployment MFE won't automate |
+| 6 | Profiling/endpoints | 676 default policies; register/CRUD API dark (Platform API) |
+| 8 | Backup | Syntax OK; no route to VPN client → no reachable repo |
+| 9 | Python automation | ise_automation_demo.py; step patterns verified live |
+| — | RADIUS live test | Accept/Reject verified vs registered NAD |
+| — | ERS CRUD | 25k users / 1k groups inventory; user+group lifecycle verified |
+
+**Playbook rule for next ISE sandbox:** never `application stop ise` on a
+single-PAN on-demand reservation to chase a flaky API surface — the app may
+not come back, and secondary nodes rarely have the API personas enabled.
