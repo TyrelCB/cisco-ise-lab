@@ -108,3 +108,46 @@ Routes advertised: 10.10.20-24.0/24, 10.17.248.0/24, 172.16.30.0/24, 192.168.254
   the account is not usable for joining; only 6 secrets are exposed on the Access Details
   cards (VPN addr/user/pw, node host/user/pw) — no separate AD-join secret is published.
   Not fixable from ISE; treat AD integration as unavailable in this reservation.
+
+## TACACS+ device admin (attempted — sandbox limitation)
+- ERS network-device schema: `authenticationSettings.networkProtocol` accepts
+  **`TACACS_PLUS`** (201 on POST). There are **no** `tacacsSharedSecret`/
+  `tacacsEnableSecret`/`tacacsPort` fields in this ERS version — the shared secret
+  rides in the `radiusSharedSecret` field regardless of protocol.
+- `RADIUS_AND_TACACS_PLUS`, `RADIUS_AND_TACACS`, `TACACSPLUS` etc. all rejected
+  (enum violation) — a NAD is either RADIUS or TACACS+, not both, via ERS here.
+- TACACS+ service is **stopped on both nodes** (tcp/49 connection-refused).
+  Enabling it = Deployment › Services editor = micro-frontend that will not mount
+  under CDP automation; `/admin/api/deploymentPolicy` answers 200 with an **empty
+  body** (session-bound, no data over fetch); CLI has no per-service start keyword.
+  Verdict: TACACS+ present in product but not exercisable in this sandbox.
+
+## Backup to remote repo (attempted — structurally impossible)
+- CLI syntax that parsed clean: `repository <name>` + `url ftp://user:pass@host/`
+  under `configure terminal`, then
+  `backup <task> repository <repo> ise-config encryption-key plain <key>`.
+- Fails at transfer: **ISE has no route to the AnyConnect client pool** —
+  `ping 192.168.254.11` from ISE = 100% loss (VPN hairpins client→lab only).
+  No FTP/SFTP/SCP repo can live on the VPN client; would need a repo on
+  10.10.x or external. `show backup status` → "No data found" (never connected).
+
+## Platform/Operations API fragility (task 6 + 8 fallout)
+- Mid-session, **all** `/api/v1/*` (Platform + operations) flipped to 404 while
+  ERS kept answering — even `/api/v1/endpoint`, previously the one live path.
+  OPS API `/ops/api/v1/endpoint` is session-cookie-bound (302→login on basic
+  auth; 200/empty via browser fetch).
+- Attempted `application stop ise` / `application start ise` (CLI has no
+  per-service toggles; `application start ise TACACSP` = syntax error;
+  `reset` invalid). **The app never came back clean**: Database/Messaging start,
+  Application Server + API Gateway stuck "not running" through multiple
+  start attempts and >2.5 h of polling. CLI stdin-piped starts silently no-op
+  unless the "Proceed? (y/n)" prompts are answered with real pacing.
+- Lesson: on this small sandbox VM, `application stop ise` is a one-way trip —
+  the app does not reliably re-boot via CLI; treat the whole tour as read-mostly
+  and avoid app restarts unless prepared to lose the reservation UI.
+
+## Endpoint profiling / register (task 6, blocked by above)
+- ERS has no `endpoint` resource (`/ers/config/endpoint` 404 on ERS 3 and 4) —
+  endpoint CRUD lives in the Platform API (`/api/v1/endpoint`), which went dark.
+- Custom profiling rule CRUD = Policy Administration API (disabled here) —
+  so custom profiling is not scriptable in this reservation at all.
